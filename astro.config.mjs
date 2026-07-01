@@ -5,7 +5,7 @@ import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  site: process.env.PUBLIC_SITE_URL || 'https://coreflow-pilates.vercel.app',
+  site: process.env.PUBLIC_SITE_URL || 'https://coreflow-pilates-x7k2.vercel.app',
   output: 'server',
   adapter: vercel(),
   integrations: [
