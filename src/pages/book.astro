@@ -1,0 +1,138 @@
+---
+import Base from '../layouts/Base.astro';
+import { anonClient } from '../lib/supabase';
+import { safeHtml } from '../lib/sanitize';
+import { formatPrice, formatSessionDay, formatSessionTime } from '../lib/format';
+import { breadcrumbSchema, siteUrl } from '../lib/seo';
+
+const supabase = anonClient();
+let pageRow: any = null;
+let sessions: any[] = [];
+let faqs: any[] = [];
+if (supabase) {
+  const [{ data: p }, { data: s }, { data: f }] = await Promise.all([
+    supabase.from('pages').select('*').eq('slug', 'book').not('published_at', 'is', null).maybeSingle(),
+    supabase
+      .from('class_sessions')
+      .select('id, starts_at, capacity, booked_count, price_pence, classes(name, slug, price_pence), instructors(name)')
+      .eq('canceled', false)
+      .gte('starts_at', new Date().toISOString())
+      .order('starts_at')
+      .limit(60),
+    supabase.from('faqs').select('*').eq('page_slug', 'book').order('sort_order'),
+  ]);
+  pageRow = p;
+  sessions = (s ?? []).filter((x: any) => x.capacity - x.booked_count > 0);
+  faqs = f ?? [];
+}
+
+const preselect = Astro.url.searchParams.get('session') ?? '';
+const error = Astro.url.searchParams.get('error') ?? '';
+const renderedAt = Date.now();
+
+const site = siteUrl(Astro.site);
+const schemas: Record<string, unknown>[] = [
+  breadcrumbSchema(site, [
+    { name: 'Home', path: '/' },
+    { name: 'Book a class', path: '/book' },
+  ]),
+];
+if (faqs.length > 0) {
+  schemas.push({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({
+      '@type': 'Question',
+      name: f.question,
+      acceptedAnswer: { '@type': 'Answer', text: f.answer_html.replace(/<[^>]+>/g, '') },
+    })),
+  });
+}
+---
+<Base
+  title={pageRow?.meta_title ?? 'Book a Pilates Class Online | Core & Flow Pilates Austin'}
+  description={pageRow?.meta_description ?? 'Book your Pilates class in Austin online. Instant confirmation, secure payment.'}
+  structuredData={schemas}
+>
+  <section class="max-w-3xl mx-auto px-5 sm:px-8 pt-16 pb-6 md:pt-24">
+    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sage">Online booking</p>
+    <h1 class="mt-3 font-display text-4xl md:text-5xl tracking-tight text-ink">{pageRow?.title ?? 'Book a Class'}</h1>
+    <div class="mt-5 prose-body" set:html={safeHtml(pageRow?.body_html)} />
+  </section>
+
+  <section class="max-w-3xl mx-auto px-5 sm:px-8 pb-14">
+    {error && (
+      <div class="mb-6 rounded-lg border border-clay/40 bg-clay/10 px-5 py-4 text-sm text-ink" role="alert">
+        {error === 'full' ? 'That class just filled up — pick another time below.' :
+         error === 'invalid' ? 'Please check your details and try again.' :
+         error === 'rate' ? 'Too many attempts — give it a minute and try again.' :
+         'Something went wrong starting checkout. Please try again.'}
+      </div>
+    )}
+    {sessions.length === 0 ? (
+      <div class="border border-ink/10 rounded-lg bg-paper-dark p-10 text-center">
+        <p class="text-ink-soft">All upcoming classes are booked out or being scheduled. <a href="/contact" class="underline underline-offset-4 decoration-sage">Contact us</a> and we'll find you a spot.</p>
+      </div>
+    ) : (
+      <form method="POST" action="/api/checkout" class="border border-ink/10 rounded-lg bg-paper p-7 md:p-9 space-y-6">
+        <div>
+          <label for="session_id" class="block text-sm font-semibold text-ink">Class &amp; time</label>
+          <select id="session_id" name="session_id" required class="mt-2 w-full rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm text-ink focus:border-sage focus:outline-none">
+            {sessions.map((s: any) => {
+              const price = s.price_pence ?? s.classes?.price_pence ?? 0;
+              const left = s.capacity - s.booked_count;
+              return (
+                <option value={s.id} selected={s.id === preselect}>
+                  {formatSessionDay(s.starts_at)} · {formatSessionTime(s.starts_at)} — {s.classes?.name} with {s.instructors?.name} ({formatPrice(price)}, {left} left)
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-6">
+          <div>
+            <label for="name" class="block text-sm font-semibold text-ink">Your name</label>
+            <input id="name" name="name" type="text" required maxlength="120" autocomplete="name" class="mt-2 w-full rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm text-ink focus:border-sage focus:outline-none" placeholder="Alex Rivera" />
+          </div>
+          <div>
+            <label for="email" class="block text-sm font-semibold text-ink">Email</label>
+            <input id="email" name="email" type="email" required maxlength="200" autocomplete="email" class="mt-2 w-full rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm text-ink focus:border-sage focus:outline-none" placeholder="you@example.com" />
+          </div>
+        </div>
+        <div>
+          <label for="spots" class="block text-sm font-semibold text-ink">Spots</label>
+          <select id="spots" name="spots" class="mt-2 w-40 rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm text-ink focus:border-sage focus:outline-none">
+            <option value="1" selected>1 person</option>
+            <option value="2">2 people</option>
+            <option value="3">3 people</option>
+          </select>
+        </div>
+        <p class="hp-field" aria-hidden="true">
+          <label>Website <input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
+        </p>
+        <input type="hidden" name="renderedAt" value={renderedAt} />
+        <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center rounded-full bg-sage px-8 py-3.5 text-base font-semibold text-paper hover:bg-sage-deep transition-all hover:-translate-y-0.5">
+          Continue to secure payment
+        </button>
+        <p class="text-xs text-ink-soft">Payments are processed by Stripe. You'll get an instant email confirmation — no account needed.</p>
+      </form>
+    )}
+
+    {faqs.length > 0 && (
+      <div class="mt-14">
+        <h2 class="font-display text-2xl text-ink">Booking questions</h2>
+        <div class="mt-5 divide-y divide-ink/10 border-y border-ink/10">
+          {faqs.map((f) => (
+            <details class="group py-4">
+              <summary class="cursor-pointer list-none flex items-center justify-between gap-4 font-semibold text-ink hover:text-sage-deep transition-colors text-sm">
+                {f.question}
+                <span class="text-sage transition-transform group-open:rotate-45 text-lg leading-none">+</span>
+              </summary>
+              <div class="mt-2 prose-body text-sm" set:html={safeHtml(f.answer_html)} />
+            </details>
+          ))}
+        </div>
+      </div>
+    )}
+  </section>
+</Base>

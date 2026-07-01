@@ -1,0 +1,72 @@
+---
+import Base from '../../layouts/Base.astro';
+import { requireAdmin } from '../../lib/requireAdmin';
+import { formatPrice, formatSessionFull } from '../../lib/format';
+
+const guard = await requireAdmin(Astro.request, Astro.cookies, '/admin/bookings');
+if (!guard.ok) return guard.response!;
+const supabase = guard.supabase!;
+
+const [{ data: bookings }, { data: messages }] = await Promise.all([
+  supabase
+    .from('bookings')
+    .select('id, customer_name, customer_email, spots, amount_pence, status, created_at, class_sessions(starts_at, classes(name))')
+    .order('created_at', { ascending: false })
+    .limit(100),
+  supabase.from('contact_messages').select('*').order('created_at', { ascending: false }).limit(50),
+]);
+---
+<Base title="Bookings | Studio Admin" description="Bookings and messages." noindex={true}>
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pt-14 pb-16">
+    <nav class="text-sm text-ink-soft"><a href="/admin" class="hover:text-ink transition-colors">Admin</a> <span class="mx-1">/</span> <span class="text-ink">Bookings</span></nav>
+    <h1 class="mt-4 font-display text-4xl tracking-tight text-ink">Bookings</h1>
+    <div class="mt-8 overflow-x-auto border border-ink/10 rounded-lg bg-paper">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-soft">
+            <th class="px-4 py-3">Customer</th>
+            <th class="px-4 py-3">Class</th>
+            <th class="px-4 py-3">Spots</th>
+            <th class="px-4 py-3">Paid</th>
+            <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3">Booked</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(bookings ?? []).length === 0 ? (
+            <tr><td colspan="6" class="px-4 py-8 text-center text-ink-soft">No bookings yet — they'll appear here the moment someone pays.</td></tr>
+          ) : (
+            (bookings ?? []).map((b: any) => {
+              const cs = Array.isArray(b.class_sessions) ? b.class_sessions[0] : b.class_sessions;
+              const cls = cs ? (Array.isArray(cs.classes) ? cs.classes[0] : cs.classes) : null;
+              return (
+                <tr class="border-b border-ink/5 last:border-0">
+                  <td class="px-4 py-3"><span class="font-semibold text-ink">{b.customer_name}</span><br /><span class="text-xs text-ink-soft">{b.customer_email}</span></td>
+                  <td class="px-4 py-3 text-ink-soft">{cls?.name}<br /><span class="text-xs">{cs ? formatSessionFull(cs.starts_at) : ''}</span></td>
+                  <td class="px-4 py-3">{b.spots}</td>
+                  <td class="px-4 py-3">{formatPrice(b.amount_pence)}</td>
+                  <td class="px-4 py-3"><span class="rounded-full bg-sage-light text-sage-deep px-3 py-0.5 text-xs font-medium">{b.status}</span></td>
+                  <td class="px-4 py-3 text-xs text-ink-soft">{new Date(b.created_at).toLocaleString('en-US', { timeZone: 'America/Chicago' })}</td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="mt-14 font-display text-3xl tracking-tight text-ink">Contact messages</h2>
+    <div class="mt-6 space-y-4">
+      {(messages ?? []).length === 0 ? (
+        <p class="text-ink-soft text-sm">No messages yet.</p>
+      ) : (
+        (messages ?? []).map((m: any) => (
+          <div class="border border-ink/10 rounded-lg bg-paper p-5">
+            <p class="text-sm"><span class="font-semibold text-ink">{m.name}</span> <a href={`mailto:${m.email}`} class="text-sage-deep underline underline-offset-2">{m.email}</a> <span class="text-xs text-ink-soft">· {new Date(m.created_at).toLocaleString('en-US', { timeZone: 'America/Chicago' })}</span></p>
+            <p class="mt-2 text-sm text-ink-soft whitespace-pre-wrap">{m.message}</p>
+          </div>
+        ))
+      )}
+    </div>
+  </section>
+</Base>

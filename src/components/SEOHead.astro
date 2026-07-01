@@ -1,0 +1,47 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  ogImage?: string;
+  ogType?: string;
+  noindex?: boolean;
+  structuredData?: Record<string, unknown>[];
+}
+
+const {
+  title,
+  description,
+  canonical,
+  ogImage = 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1200&h=630&fit=crop',
+  ogType = 'website',
+  noindex = false,
+  structuredData = [],
+} = Astro.props;
+
+const site = import.meta.env.PUBLIC_SITE_URL || Astro.site?.toString().replace(/\/$/, '') || '';
+const canonicalUrl = canonical || new URL(Astro.url.pathname, site || Astro.url.origin).toString();
+---
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalUrl} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:type" content={ogType} />
+<meta property="og:url" content={canonicalUrl} />
+<meta property="og:image" content={ogImage} />
+<meta property="og:site_name" content="Core & Flow Pilates" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImage} />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+{structuredData.map((schema) => (
+  <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+))}

@@ -1,0 +1,47 @@
+---
+import Base from '../../layouts/Base.astro';
+import { requireAdmin, EDITABLE_TABLES } from '../../lib/requireAdmin';
+
+const guard = await requireAdmin(Astro.request, Astro.cookies, '/admin');
+if (!guard.ok) return guard.response!;
+const supabase = guard.supabase!;
+
+const tables = Object.entries(EDITABLE_TABLES);
+const counts: Record<string, number> = {};
+await Promise.all(
+  tables.map(async ([name]) => {
+    const { count } = await supabase.from(name).select('*', { count: 'exact', head: true });
+    counts[name] = count ?? 0;
+  })
+);
+const { count: bookingCount } = await supabase.from('bookings').select('*', { count: 'exact', head: true });
+const { count: messageCount } = await supabase.from('contact_messages').select('*', { count: 'exact', head: true });
+---
+<Base title="Studio Admin | Core & Flow Pilates" description="Manage the studio site." noindex={true}>
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pt-14 pb-16">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="font-display text-4xl tracking-tight text-ink">Studio admin</h1>
+        <p class="mt-2 text-sm text-ink-soft">Signed in as {guard.email}</p>
+      </div>
+      <form method="POST" action="/auth/signout">
+        <button type="submit" class="rounded-full border border-ink/20 px-5 py-2 text-sm font-semibold text-ink hover:bg-ink hover:text-paper transition-colors">Sign out</button>
+      </form>
+    </div>
+
+    <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {tables.map(([name, cfg]) => (
+        <a href={`/admin/${name}`} class="group border border-ink/10 rounded-lg bg-paper p-6 hover:border-sage transition-colors">
+          <p class="font-display text-2xl text-ink group-hover:text-sage-deep transition-colors">{cfg.label}</p>
+          <p class="mt-1 text-sm text-ink-soft">{counts[name]} rows</p>
+          <p class="mt-4 text-sm font-semibold text-sage">Edit →</p>
+        </a>
+      ))}
+      <a href="/admin/bookings" class="group border border-ink/10 rounded-lg bg-paper-dark p-6 hover:border-sage transition-colors">
+        <p class="font-display text-2xl text-ink group-hover:text-sage-deep transition-colors">Bookings</p>
+        <p class="mt-1 text-sm text-ink-soft">{bookingCount ?? 0} bookings · {messageCount ?? 0} messages</p>
+        <p class="mt-4 text-sm font-semibold text-sage">View →</p>
+      </a>
+    </div>
+  </section>
+</Base>

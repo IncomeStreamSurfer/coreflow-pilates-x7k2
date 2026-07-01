@@ -1,0 +1,20 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base
+  title="Checkout Canceled | Core & Flow Pilates"
+  description="Your checkout was canceled — nothing was charged."
+  noindex={true}
+>
+  <section class="max-w-2xl mx-auto px-5 sm:px-8 pt-20 pb-16 md:pt-28 text-center">
+    <h1 class="font-display text-4xl md:text-5xl tracking-tight text-ink">No worries — nothing was charged</h1>
+    <p class="mt-6 text-ink-soft leading-relaxed">
+      You backed out of checkout before paying, so your card wasn't touched and no spot was reserved. The class is still there whenever you're ready.
+    </p>
+    <div class="mt-8 flex items-center justify-center gap-6">
+      <a href="/book" class="inline-flex items-center rounded-full bg-sage px-7 py-3 text-base font-semibold text-paper hover:bg-sage-deep transition-all hover:-translate-y-0.5">Try booking again</a>
+      <a href="/schedule" class="text-base font-medium text-ink underline underline-offset-4 decoration-sage hover:text-sage-deep transition-colors">Browse the schedule</a>
+    </div>
+    <p class="mt-8 text-sm text-ink-soft">Hit a snag with payment? <a href="/contact" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">Tell us</a> and we'll book you in by hand.</p>
+  </section>
+</Base>

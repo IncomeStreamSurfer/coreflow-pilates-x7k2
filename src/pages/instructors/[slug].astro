@@ -1,0 +1,100 @@
+---
+import Base from '../../layouts/Base.astro';
+import { anonClient } from '../../lib/supabase';
+import { safeHtml } from '../../lib/sanitize';
+import { formatSessionDay, formatSessionTime } from '../../lib/format';
+import { breadcrumbSchema, siteUrl } from '../../lib/seo';
+
+const { slug } = Astro.params;
+const supabase = anonClient();
+if (!supabase) return new Response('Service unavailable', { status: 500 });
+
+const { data: person } = await supabase.from('instructors').select('*').eq('slug', slug).not('published_at', 'is', null).maybeSingle();
+if (!person) return new Response(null, { status: 404 });
+
+const { data: sessions } = await supabase
+  .from('class_sessions')
+  .select('id, starts_at, capacity, booked_count, classes(name, slug)')
+  .eq('instructor_id', person.id)
+  .eq('canceled', false)
+  .gte('starts_at', new Date().toISOString())
+  .order('starts_at')
+  .limit(6);
+
+const site = siteUrl(Astro.site);
+const schemas = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: person.name,
+    jobTitle: person.title,
+    description: person.short_bio,
+    image: person.image_url,
+    worksFor: { '@type': 'ExerciseGym', name: 'Core & Flow Pilates', url: site },
+    url: `${site}/instructors/${person.slug}`,
+  },
+  breadcrumbSchema(site, [
+    { name: 'Home', path: '/' },
+    { name: 'Instructors', path: '/instructors' },
+    { name: person.name, path: `/instructors/${person.slug}` },
+  ]),
+];
+---
+<Base
+  title={person.meta_title ?? `${person.name}, Pilates Instructor | Core & Flow Pilates`}
+  description={person.meta_description ?? person.short_bio}
+  ogImage={person.image_url}
+  structuredData={schemas}
+>
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pt-16 md:pt-24 grid md:grid-cols-12 gap-12">
+    <div class="md:col-span-4">
+      <img src={person.image_url} alt={`${person.name}, ${person.title} at Core & Flow Pilates in Austin`} class="w-full h-[420px] object-cover rounded-lg border border-ink/10" width="800" height="900" />
+      <div class="mt-6 border border-ink/10 rounded-lg bg-paper-dark p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider text-ink-soft">Certifications</p>
+        <ul class="mt-2 space-y-1.5 text-sm text-ink">
+          {(person.certifications ?? []).map((c: string) => <li>· {c}</li>)}
+        </ul>
+        <p class="mt-4 text-xs font-semibold uppercase tracking-wider text-ink-soft">Specialties</p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {(person.specialties ?? []).map((s: string) => (
+            <span class="rounded-full bg-sage-light text-sage-deep px-3 py-1 text-xs font-medium">{s}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+    <div class="md:col-span-8">
+      <nav class="text-sm text-ink-soft" aria-label="Breadcrumb">
+        <a href="/instructors" class="hover:text-ink transition-colors">Instructors</a> <span class="mx-1">/</span> <span class="text-ink">{person.name}</span>
+      </nav>
+      <h1 class="mt-4 font-display text-4xl md:text-5xl tracking-tight text-ink">{person.name} — {person.title}</h1>
+      <article class="mt-6 prose-body" set:html={safeHtml(person.bio_html)} />
+
+      <div class="mt-10 border-t border-ink/10 pt-8">
+        <h2 class="font-display text-2xl text-ink">Train with {person.name.split(' ')[0]}</h2>
+        {(sessions ?? []).length === 0 ? (
+          <p class="mt-3 text-ink-soft text-sm">New class times coming soon — <a href="/schedule" class="underline underline-offset-2">see the full schedule</a>.</p>
+        ) : (
+          <ul class="mt-5 grid gap-3 sm:grid-cols-2">
+            {(sessions ?? []).map((s: any) => {
+              const left = s.capacity - s.booked_count;
+              return (
+                <li class="flex items-center justify-between gap-3 border border-ink/10 rounded-lg bg-paper px-4 py-3">
+                  <div>
+                    <p class="text-sm font-semibold text-ink">{s.classes?.name}</p>
+                    <p class="text-xs text-ink-soft">{formatSessionDay(s.starts_at)} · {formatSessionTime(s.starts_at)}</p>
+                  </div>
+                  {left > 0 ? (
+                    <a href={`/book?session=${s.id}`} class="rounded-full bg-sage px-4 py-1.5 text-xs font-semibold text-paper hover:bg-sage-deep transition-colors whitespace-nowrap">Book</a>
+                  ) : (
+                    <span class="rounded-full bg-ink/10 px-4 py-1.5 text-xs font-semibold text-ink-soft whitespace-nowrap">Full</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p class="mt-6 text-sm text-ink-soft">Or explore the classes {person.name.split(' ')[0]} teaches: {(person.specialties ?? []).includes('Barre') ? <a href="/classes/barre-fusion" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">Barre Fusion</a> : (person.specialties ?? []).includes('Prenatal') ? <a href="/classes/prenatal-pilates" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">Prenatal Pilates</a> : <a href="/classes/reformer-pilates" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">Reformer Pilates</a>} — or <a href="/book" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">book any class</a>.</p>
+      </div>
+    </div>
+  </section>
+</Base>

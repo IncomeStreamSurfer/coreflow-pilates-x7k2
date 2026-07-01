@@ -1,0 +1,139 @@
+---
+import Base from '../../layouts/Base.astro';
+import { requireAdmin, EDITABLE_TABLES } from '../../lib/requireAdmin';
+
+const { table } = Astro.params;
+const cfg = table ? EDITABLE_TABLES[table] : undefined;
+if (!cfg || !table) return new Response(null, { status: 404 });
+
+const guard = await requireAdmin(Astro.request, Astro.cookies, `/admin/${table}`);
+if (!guard.ok) return guard.response!;
+const supabase = guard.supabase!;
+
+let notice = '';
+let errorMsg = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = String(form.get('_action') ?? '');
+  const id = String(form.get('_id') ?? '');
+  try {
+    if (action === 'save' || action === 'create') {
+      const row: Record<string, unknown> = {};
+      for (const col of cfg.cols) {
+        const raw = form.get(col.name);
+        if (raw === null) continue;
+        const val = String(raw);
+        if (col.kind === 'number') row[col.name] = val === '' ? null : Number(val);
+        else if (col.kind === 'array') row[col.name] = val.split('\n').map((s) => s.trim()).filter(Boolean);
+        else row[col.name] = val;
+      }
+      if (action === 'create') {
+        const { error } = await supabase.from(table).insert(row);
+        if (error) throw error;
+        notice = 'Row created.';
+      } else {
+        const { error } = await supabase.from(table).update(row).eq('id', id);
+        if (error) throw error;
+        notice = 'Saved.';
+      }
+    } else if (action === 'publish' || action === 'unpublish') {
+      const { error } = await supabase.from(table).update({ published_at: action === 'publish' ? new Date().toISOString() : null }).eq('id', id);
+      if (error) throw error;
+      notice = action === 'publish' ? 'Published.' : 'Unpublished (draft).';
+    } else if (action === 'delete') {
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) throw error;
+      notice = 'Deleted.';
+    }
+  } catch (err: any) {
+    errorMsg = err?.message ?? 'Something went wrong.';
+  }
+}
+
+const orderCol = cfg.cols.some((c) => c.name === 'sort_order') ? 'sort_order' : (table === 'class_sessions' ? 'starts_at' : 'created_at');
+const { data: rows } = await supabase.from(table).select('*').order(orderCol, { ascending: table !== 'content' }).limit(200);
+const editId = Astro.url.searchParams.get('edit');
+const creating = Astro.url.searchParams.get('new') === '1';
+const editRow = (rows ?? []).find((r: any) => r.id === editId);
+
+const inputCls = 'mt-1 w-full rounded-md border border-ink/20 bg-paper px-3 py-2 text-sm focus:border-sage focus:outline-none';
+---
+<Base title={`${cfg.label} | Studio Admin`} description="Edit site content." noindex={true}>
+  <section class="max-w-5xl mx-auto px-5 sm:px-8 pt-14 pb-16">
+    <nav class="text-sm text-ink-soft"><a href="/admin" class="hover:text-ink transition-colors">Admin</a> <span class="mx-1">/</span> <span class="text-ink">{cfg.label}</span></nav>
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-4">
+      <h1 class="font-display text-4xl tracking-tight text-ink">{cfg.label}</h1>
+      <a href={`/admin/${table}?new=1`} class="rounded-full bg-sage px-5 py-2 text-sm font-semibold text-paper hover:bg-sage-deep transition-colors">+ New row</a>
+    </div>
+
+    {notice && <div class="mt-6 rounded-lg border border-sage/40 bg-sage-light px-5 py-3 text-sm text-ink">{notice}</div>}
+    {errorMsg && <div class="mt-6 rounded-lg border border-clay/40 bg-clay/10 px-5 py-3 text-sm text-ink">{errorMsg}</div>}
+
+    {(creating || editRow) && (
+      <form method="POST" class="mt-8 border border-sage/40 rounded-lg bg-paper p-6 space-y-4">
+        <h2 class="font-display text-2xl text-ink">{creating ? 'New row' : `Editing: ${editRow?.[cfg.titleCol] ?? editRow?.id}`}</h2>
+        <input type="hidden" name="_action" value={creating ? 'create' : 'save'} />
+        {!creating && <input type="hidden" name="_id" value={editRow?.id} />}
+        {cfg.cols.map((col) => (
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-ink-soft" for={col.name}>{col.name}{col.kind === 'array' ? ' (one per line)' : ''}</label>
+            {col.kind === 'textarea' ? (
+              <textarea id={col.name} name={col.name} rows={col.name.includes('body') ? 12 : 4} class={inputCls}>{creating ? '' : (editRow?.[col.name] ?? '')}</textarea>
+            ) : col.kind === 'array' ? (
+              <textarea id={col.name} name={col.name} rows="3" class={inputCls}>{creating ? '' : ((editRow?.[col.name] ?? []) as string[]).join('\n')}</textarea>
+            ) : (
+              <input id={col.name} name={col.name} type={col.kind === 'number' ? 'number' : 'text'} value={creating ? '' : (editRow?.[col.name] ?? '')} class={inputCls} />
+            )}
+          </div>
+        ))}
+        <div class="flex items-center gap-4 pt-2">
+          <button type="submit" class="rounded-full bg-sage px-6 py-2.5 text-sm font-semibold text-paper hover:bg-sage-deep transition-colors">{creating ? 'Create' : 'Save changes'}</button>
+          <a href={`/admin/${table}`} class="text-sm text-ink-soft underline underline-offset-2 hover:text-ink">Cancel</a>
+        </div>
+      </form>
+    )}
+
+    <div class="mt-8 overflow-x-auto border border-ink/10 rounded-lg bg-paper">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-soft">
+            <th class="px-4 py-3">{cfg.titleCol}</th>
+            {cfg.hasPublished && <th class="px-4 py-3">State</th>}
+            <th class="px-4 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(rows ?? []).map((r: any) => (
+            <tr class="border-b border-ink/5 last:border-0">
+              <td class="px-4 py-3">
+                <span class="font-semibold text-ink">{String(r[cfg.titleCol] ?? r.id).slice(0, 80)}</span>
+                {r.slug && <span class="ml-2 text-xs text-ink-soft">/{r.slug}</span>}
+              </td>
+              {cfg.hasPublished && (
+                <td class="px-4 py-3">
+                  {r.published_at ? <span class="rounded-full bg-sage-light text-sage-deep px-3 py-0.5 text-xs font-medium">Published</span> : <span class="rounded-full bg-ink/10 text-ink-soft px-3 py-0.5 text-xs font-medium">Draft</span>}
+                </td>
+              )}
+              <td class="px-4 py-3 text-right whitespace-nowrap">
+                <a href={`/admin/${table}?edit=${r.id}`} class="text-sm font-semibold text-sage-deep hover:text-ink transition-colors">Edit</a>
+                {cfg.hasPublished && (
+                  <form method="POST" class="inline ml-3">
+                    <input type="hidden" name="_action" value={r.published_at ? 'unpublish' : 'publish'} />
+                    <input type="hidden" name="_id" value={r.id} />
+                    <button type="submit" class="text-sm text-ink-soft underline underline-offset-2 hover:text-ink">{r.published_at ? 'Unpublish' : 'Publish'}</button>
+                  </form>
+                )}
+                <form method="POST" class="inline ml-3" onsubmit="return confirm('Delete this row permanently?')">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="_id" value={r.id} />
+                  <button type="submit" class="text-sm text-clay underline underline-offset-2 hover:text-ink">Delete</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</Base>

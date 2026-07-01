@@ -1,0 +1,85 @@
+---
+import Base from '../layouts/Base.astro';
+import { anonClient } from '../lib/supabase';
+import { safeHtml } from '../lib/sanitize';
+import { breadcrumbSchema, siteUrl } from '../lib/seo';
+
+const supabase = anonClient();
+let pageRow: any = null;
+if (supabase) {
+  const { data } = await supabase.from('pages').select('*').eq('slug', 'contact').not('published_at', 'is', null).maybeSingle();
+  pageRow = data;
+}
+
+const sent = Astro.url.searchParams.get('sent') === '1';
+const error = Astro.url.searchParams.get('error') ?? '';
+const renderedAt = Date.now();
+
+const site = siteUrl(Astro.site);
+const schemas = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ContactPage',
+    name: pageRow?.title ?? 'Contact Us',
+    url: `${site}/contact`,
+  },
+  breadcrumbSchema(site, [
+    { name: 'Home', path: '/' },
+    { name: 'Contact', path: '/contact' },
+  ]),
+];
+---
+<Base
+  title={pageRow?.meta_title ?? 'Contact | Core & Flow Pilates Austin'}
+  description={pageRow?.meta_description ?? 'Get in touch with Core & Flow Pilates in Austin.'}
+  structuredData={schemas}
+>
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pt-16 md:pt-24 grid md:grid-cols-12 gap-12 pb-16">
+    <div class="md:col-span-5">
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sage">Say hello</p>
+      <h1 class="mt-3 font-display text-4xl md:text-5xl tracking-tight text-ink">{pageRow?.title ?? 'Contact Us'}</h1>
+      <div class="mt-6 prose-body" set:html={safeHtml(pageRow?.body_html)} />
+      <div class="mt-8 space-y-3 text-sm text-ink-soft">
+        <p><span class="font-semibold text-ink">Studio:</span> 1408 S Lamar Blvd, Suite 210, Austin, TX 78704</p>
+        <p><span class="font-semibold text-ink">Phone:</span> <a href="tel:+15125550182" class="underline underline-offset-2 hover:text-ink transition-colors">(512) 555-0182</a></p>
+        <p><span class="font-semibold text-ink">Hours:</span> Mon–Fri 6:00a–8:00p · Sat–Sun 8:00a–2:00p</p>
+      </div>
+    </div>
+    <div class="md:col-span-7">
+      {sent ? (
+        <div class="border border-sage/40 rounded-lg bg-sage-light p-10 text-center">
+          <h2 class="font-display text-2xl text-ink">Message received</h2>
+          <p class="mt-3 text-ink-soft">Thanks — a human (usually Maria) will reply within one business day. A confirmation is in your inbox.</p>
+          <a href="/schedule" class="mt-6 inline-flex items-center rounded-full bg-sage px-6 py-2.5 text-sm font-semibold text-paper hover:bg-sage-deep transition-colors">Browse this week's classes</a>
+        </div>
+      ) : (
+        <form method="POST" action="/api/contact" class="border border-ink/10 rounded-lg bg-paper p-7 md:p-9 space-y-6">
+          {error && (
+            <div class="rounded-lg border border-clay/40 bg-clay/10 px-5 py-3.5 text-sm text-ink" role="alert">
+              {error === 'rate' ? 'Too many messages — give it a minute and try again.' : error === 'invalid' ? 'Please fill in every field with a valid email.' : 'Something went wrong — please try again.'}
+            </div>
+          )}
+          <div class="grid sm:grid-cols-2 gap-6">
+            <div>
+              <label for="name" class="block text-sm font-semibold text-ink">Your name</label>
+              <input id="name" name="name" type="text" required maxlength="120" autocomplete="name" class="mt-2 w-full rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm focus:border-sage focus:outline-none" placeholder="Alex Rivera" />
+            </div>
+            <div>
+              <label for="email" class="block text-sm font-semibold text-ink">Email</label>
+              <input id="email" name="email" type="email" required maxlength="200" autocomplete="email" class="mt-2 w-full rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm focus:border-sage focus:outline-none" placeholder="you@example.com" />
+            </div>
+          </div>
+          <div>
+            <label for="message" class="block text-sm font-semibold text-ink">Message</label>
+            <textarea id="message" name="message" required rows="6" maxlength="4000" class="mt-2 w-full rounded-md border border-ink/20 bg-paper px-4 py-3 text-sm focus:border-sage focus:outline-none" placeholder="Ask about classes, private sessions, prenatal timing — anything."></textarea>
+          </div>
+          <p class="hp-field" aria-hidden="true">
+            <label>Website <input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
+          </p>
+          <input type="hidden" name="renderedAt" value={renderedAt} />
+          <button type="submit" class="inline-flex items-center rounded-full bg-sage px-8 py-3.5 text-base font-semibold text-paper hover:bg-sage-deep transition-all hover:-translate-y-0.5">Send message</button>
+        </form>
+      )}
+    </div>
+  </section>
+</Base>

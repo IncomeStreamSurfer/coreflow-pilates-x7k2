@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Work Sans", system-ui, sans-serif;
+
+  --color-paper: #faf6f0;
+  --color-paper-dark: #f2ebe0;
+  --color-ink: #26291f;
+  --color-ink-soft: #55594a;
+  --color-sage: #5c6f52;
+  --color-sage-deep: #45543d;
+  --color-sage-light: #e7ece2;
+  --color-clay: #b9683f;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+}
+
+::selection {
+  background: var(--color-sage);
+  color: var(--color-paper);
+}
+
+.hp-field {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.prose-body h2 { font-size: 1.65rem; line-height: 1.15; margin: 2rem 0 0.75rem; letter-spacing: -0.01em; }
+.prose-body h3 { font-size: 1.25rem; line-height: 1.2; margin: 1.5rem 0 0.5rem; }
+.prose-body p { margin: 0 0 1rem; line-height: 1.75; color: var(--color-ink-soft); }
+.prose-body ul { list-style: disc; padding-left: 1.4rem; margin: 0 0 1rem; }
+.prose-body li { margin-bottom: 0.4rem; line-height: 1.65; color: var(--color-ink-soft); }
+.prose-body a { color: var(--color-sage-deep); text-decoration: underline; text-underline-offset: 3px; }
+.prose-body a:hover { color: var(--color-ink); }
+.prose-body strong { color: var(--color-ink); }

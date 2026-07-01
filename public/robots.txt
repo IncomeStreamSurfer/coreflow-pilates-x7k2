@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /checkout/
+Disallow: /login
+Disallow: /auth/
+
+Sitemap: https://coreflow-pilates.vercel.app/sitemap-index.xml

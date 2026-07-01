@@ -1,0 +1,54 @@
+---
+import Base from '../../layouts/Base.astro';
+import { stripeClient } from '../../lib/stripe';
+import { formatPrice } from '../../lib/format';
+
+const sessionId = Astro.url.searchParams.get('session_id') ?? '';
+let summary: { className?: string; email?: string; amount?: string; reference?: string } | null = null;
+
+if (sessionId) {
+  const stripe = stripeClient();
+  if (stripe) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['line_items'] });
+      if (session.payment_status === 'paid') {
+        summary = {
+          className: session.line_items?.data?.[0]?.description ?? undefined,
+          email: session.customer_details?.email ?? undefined,
+          amount: formatPrice(session.amount_total ?? 0),
+          reference: session.id.slice(-8).toUpperCase(),
+        };
+      }
+    } catch {
+      summary = null;
+    }
+  }
+}
+---
+<Base
+  title="Booking Confirmed | Core & Flow Pilates"
+  description="Your Pilates class booking is confirmed."
+  noindex={true}
+>
+  <section class="max-w-2xl mx-auto px-5 sm:px-8 pt-20 pb-16 md:pt-28 text-center">
+    <div class="mx-auto w-16 h-16 rounded-full bg-sage-light flex items-center justify-center">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#45543d" stroke-width="2.5"><path d="M4 12.5l5 5L20 6.5"/></svg>
+    </div>
+    <h1 class="mt-6 font-display text-4xl md:text-5xl tracking-tight text-ink">You're on the roster</h1>
+    {summary ? (
+      <div class="mt-8 border border-ink/10 rounded-lg bg-paper-dark p-7 text-left space-y-2 text-sm">
+        {summary.className && <p><span class="font-semibold text-ink">Class:</span> <span class="text-ink-soft">{summary.className}</span></p>}
+        {summary.amount && <p><span class="font-semibold text-ink">Paid:</span> <span class="text-ink-soft">{summary.amount}</span></p>}
+        {summary.reference && <p><span class="font-semibold text-ink">Reference:</span> <span class="text-ink-soft">{summary.reference}</span></p>}
+        {summary.email && <p class="pt-2 text-ink-soft">A confirmation with everything you need is on its way to <span class="font-semibold text-ink">{summary.email}</span>.</p>}
+      </div>
+    ) : (
+      <p class="mt-6 text-ink-soft leading-relaxed">Your payment went through and your spot is locked in. A confirmation email with the details is on its way.</p>
+    )}
+    <p class="mt-8 text-ink-soft text-sm leading-relaxed">Arrive five minutes early, bring water and grip socks (or grab a pair at the desk). Free parking behind the building.</p>
+    <div class="mt-8 flex items-center justify-center gap-6">
+      <a href="/schedule" class="inline-flex items-center rounded-full bg-sage px-7 py-3 text-base font-semibold text-paper hover:bg-sage-deep transition-all hover:-translate-y-0.5">Book another class</a>
+      <a href="/" class="text-base font-medium text-ink underline underline-offset-4 decoration-sage hover:text-sage-deep transition-colors">Back home</a>
+    </div>
+  </section>
+</Base>

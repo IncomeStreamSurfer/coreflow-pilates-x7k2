@@ -1,0 +1,96 @@
+---
+import Base from '../layouts/Base.astro';
+import { anonClient } from '../lib/supabase';
+import { safeHtml } from '../lib/sanitize';
+import { formatPrice, formatSessionDay, formatSessionTime, dayKey } from '../lib/format';
+import { breadcrumbSchema, siteUrl } from '../lib/seo';
+
+const supabase = anonClient();
+let pageRow: any = null;
+let sessions: any[] = [];
+if (supabase) {
+  const [{ data: p }, { data: s }] = await Promise.all([
+    supabase.from('pages').select('*').eq('slug', 'schedule').not('published_at', 'is', null).maybeSingle(),
+    supabase
+      .from('class_sessions')
+      .select('id, starts_at, capacity, booked_count, price_pence, classes(name, slug, price_pence, duration_minutes), instructors(name, slug)')
+      .eq('canceled', false)
+      .gte('starts_at', new Date().toISOString())
+      .lte('starts_at', new Date(Date.now() + 14 * 86400_000).toISOString())
+      .order('starts_at'),
+  ]);
+  pageRow = p;
+  sessions = s ?? [];
+}
+
+const days = new Map<string, any[]>();
+for (const s of sessions) {
+  const k = dayKey(s.starts_at);
+  if (!days.has(k)) days.set(k, []);
+  days.get(k)!.push(s);
+}
+
+const site = siteUrl(Astro.site);
+const schemas = [
+  breadcrumbSchema(site, [
+    { name: 'Home', path: '/' },
+    { name: 'Schedule', path: '/schedule' },
+  ]),
+];
+---
+<Base
+  title={pageRow?.meta_title ?? 'Class Schedule | Core & Flow Pilates Austin'}
+  description={pageRow?.meta_description ?? "See this week's Pilates classes in Austin and book your spot online."}
+  structuredData={schemas}
+>
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pt-16 pb-8 md:pt-24">
+    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sage">Next two weeks</p>
+    <h1 class="mt-3 font-display text-4xl md:text-5xl tracking-tight text-ink">{pageRow?.title ?? 'Weekly Class Schedule'}</h1>
+    <div class="mt-6 max-w-3xl prose-body" set:html={safeHtml(pageRow?.body_html)} />
+  </section>
+
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pb-14">
+    {days.size === 0 ? (
+      <div class="border border-ink/10 rounded-lg bg-paper-dark p-10 text-center">
+        <p class="text-ink-soft">The next schedule block is being posted now — <a href="/contact" class="underline underline-offset-4 decoration-sage">contact us</a> and we'll reserve your spot by hand.</p>
+      </div>
+    ) : (
+      <div class="space-y-10">
+        {[...days.entries()].map(([k, list]) => (
+          <div>
+            <h2 class="font-display text-2xl text-ink border-b border-ink/10 pb-3">{formatSessionDay(list[0].starts_at)}</h2>
+            <ul class="divide-y divide-ink/5">
+              {list.map((s: any) => {
+                const left = s.capacity - s.booked_count;
+                const price = s.price_pence ?? s.classes?.price_pence ?? 0;
+                return (
+                  <li class="py-4 grid grid-cols-2 sm:grid-cols-12 gap-3 items-center">
+                    <div class="sm:col-span-2">
+                      <p class="font-semibold text-ink">{formatSessionTime(s.starts_at)}</p>
+                      <p class="text-xs text-ink-soft">{s.classes?.duration_minutes} min</p>
+                    </div>
+                    <div class="sm:col-span-4">
+                      <a href={`/classes/${s.classes?.slug}`} class="font-semibold text-ink hover:text-sage-deep transition-colors">{s.classes?.name}</a>
+                      <p class="text-xs text-ink-soft">with <a href={`/instructors/${s.instructors?.slug}`} class="underline underline-offset-2 hover:text-ink">{s.instructors?.name}</a></p>
+                    </div>
+                    <div class="sm:col-span-3 text-sm text-ink-soft">
+                      {left > 0 ? `${left} of ${s.capacity} spots open` : 'Class full'} · {formatPrice(price)}
+                    </div>
+                    <div class="sm:col-span-3 sm:text-right">
+                      {left > 0 ? (
+                        <a href={`/book?session=${s.id}`} class="inline-flex items-center rounded-full bg-sage px-5 py-2 text-sm font-semibold text-paper hover:bg-sage-deep transition-all hover:-translate-y-px">Book this class</a>
+                      ) : (
+                        <span class="inline-flex items-center rounded-full bg-ink/10 px-5 py-2 text-sm font-semibold text-ink-soft">Full</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    )}
+    <p class="mt-12 text-sm text-ink-soft max-w-2xl">New to the studio? Read about <a href="/classes" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">our class types</a> first, or meet <a href="/instructors" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">the instructors</a>. Reformer classes cap at six and fill fastest.</p>
+  </section>
+</Base>

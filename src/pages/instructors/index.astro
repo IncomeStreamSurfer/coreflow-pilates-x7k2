@@ -1,0 +1,79 @@
+---
+import Base from '../../layouts/Base.astro';
+import { anonClient } from '../../lib/supabase';
+import { safeHtml } from '../../lib/sanitize';
+import { breadcrumbSchema, siteUrl } from '../../lib/seo';
+
+const supabase = anonClient();
+let pageRow: any = null;
+let instructors: any[] = [];
+if (supabase) {
+  const [{ data: p }, { data: i }] = await Promise.all([
+    supabase.from('pages').select('*').eq('slug', 'instructors').not('published_at', 'is', null).maybeSingle(),
+    supabase.from('instructors').select('*').not('published_at', 'is', null).order('sort_order'),
+  ]);
+  pageRow = p;
+  instructors = i ?? [];
+}
+
+const site = siteUrl(Astro.site);
+const schemas = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: pageRow?.title ?? 'Meet Our Instructors',
+    description: pageRow?.meta_description ?? '',
+    url: `${site}/instructors`,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: instructors.map((p, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: p.name,
+        url: `${site}/instructors/${p.slug}`,
+      })),
+    },
+  },
+  breadcrumbSchema(site, [
+    { name: 'Home', path: '/' },
+    { name: 'Instructors', path: '/instructors' },
+  ]),
+];
+---
+<Base
+  title={pageRow?.meta_title ?? 'Pilates Instructors | Core & Flow Pilates'}
+  description={pageRow?.meta_description ?? 'Meet the certified Pilates instructors at Core & Flow Pilates in Austin.'}
+  structuredData={schemas}
+>
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pt-16 pb-8 md:pt-24">
+    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sage">The team</p>
+    <h1 class="mt-3 font-display text-4xl md:text-5xl tracking-tight text-ink">{pageRow?.title ?? 'Meet Our Instructors'}</h1>
+    <div class="mt-6 max-w-3xl prose-body" set:html={safeHtml(pageRow?.body_html)} />
+  </section>
+
+  <section class="max-w-6xl mx-auto px-5 sm:px-8 pb-14">
+    {instructors.length === 0 ? (
+      <p class="text-ink-soft py-12">Instructor profiles are on their way.</p>
+    ) : (
+      <div class="grid gap-8 md:grid-cols-3">
+        {instructors.map((p) => (
+          <a href={`/instructors/${p.slug}`} class="group border border-ink/10 rounded-lg overflow-hidden bg-paper hover:border-sage transition-colors">
+            <img src={p.image_url} alt={`${p.name}, ${p.title} at Core & Flow Pilates Austin`} class="w-full h-80 object-cover group-hover:opacity-90 transition-opacity" width="800" height="900" loading="lazy" />
+            <div class="p-6">
+              <h2 class="font-display text-2xl text-ink group-hover:text-sage-deep transition-colors">{p.name}</h2>
+              <p class="mt-1 text-sm font-medium text-sage-deep">{p.title}</p>
+              <p class="mt-3 text-sm leading-relaxed text-ink-soft">{p.short_bio}</p>
+              <div class="mt-4 flex flex-wrap gap-2">
+                {(p.specialties ?? []).map((s: string) => (
+                  <span class="rounded-full bg-sage-light text-sage-deep px-3 py-1 text-xs font-medium">{s}</span>
+                ))}
+              </div>
+              <p class="mt-5 text-sm font-semibold text-sage group-hover:text-sage-deep transition-colors">Full bio →</p>
+            </div>
+          </a>
+        ))}
+      </div>
+    )}
+    <p class="mt-12 text-ink-soft">Want to train with a specific instructor? <a href="/schedule" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">The schedule</a> lists who teaches every class — or browse <a href="/classes" class="underline underline-offset-4 decoration-sage hover:text-sage-deep">all classes</a> first.</p>
+  </section>
+</Base>
